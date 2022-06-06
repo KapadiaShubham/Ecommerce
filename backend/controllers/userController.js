@@ -22,11 +22,11 @@ exports.registerUser = catchAsyncErrors(async (req, res, next) => {
   sendToken(user, 201, res)
 })
 
-//Login user
+// Login User
 exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   const { email, password } = req.body
 
-  //checking if user has given email and password both
+  // checking if user has given password and email both
 
   if (!email || !password) {
     return next(new ErrorHandler('Please Enter email and password', 400))
@@ -47,8 +47,8 @@ exports.loginUser = catchAsyncErrors(async (req, res, next) => {
   sendToken(user, 200, res)
 })
 
-//Logout user
-exports.logOut = catchAsyncErrors(async (req, res, next) => {
+// Logout User
+exports.logout = catchAsyncErrors(async (req, res, next) => {
   res.cookie('token', null, {
     expires: new Date(Date.now()),
     httpOnly: true
@@ -61,7 +61,7 @@ exports.logOut = catchAsyncErrors(async (req, res, next) => {
 })
 
 // Forgot Password
-exports.forgotPassord = catchAsyncErrors(async (req, res, next) => {
+exports.forgotPassword = catchAsyncErrors(async (req, res, next) => {
   const user = await User.findOne({ email: req.body.email })
 
   if (!user) {
@@ -75,14 +75,14 @@ exports.forgotPassord = catchAsyncErrors(async (req, res, next) => {
 
   const resetPasswordUrl = `${req.protocol}://${req.get(
     'host'
-  )}/api/v1/password/reset/${resetToken}`
+  )}/password/reset/${resetToken}`
 
-  const message = `Your password reset token is :- \n\n ${resetPasswordUrl} \n\nIf you have not requested this email then, please ignore it`
+  const message = `Your password reset token is :- \n\n ${resetPasswordUrl} \n\nIf you have not requested this email then, please ignore it.`
 
   try {
     await sendEmail({
       email: user.email,
-      subject: 'Ecommerce Password Recovery',
+      subject: `Ecommerce Password Recovery`,
       message
     })
 
@@ -100,7 +100,7 @@ exports.forgotPassord = catchAsyncErrors(async (req, res, next) => {
   }
 })
 
-// Reset password
+// Reset Password
 exports.resetPassword = catchAsyncErrors(async (req, res, next) => {
   // Creating token hash
   const resetPasswordToken = crypto
@@ -108,7 +108,7 @@ exports.resetPassword = catchAsyncErrors(async (req, res, next) => {
     .update(req.params.token)
     .digest('hex')
 
-  const user = User.findOne({
+  const user = await User.findOne({
     resetPasswordToken,
     resetPasswordExpire: { $gt: Date.now() }
   })
@@ -130,7 +130,38 @@ exports.resetPassword = catchAsyncErrors(async (req, res, next) => {
   user.resetPasswordExpire = undefined
 
   await user.save()
-//   await user.save({ validateBeforeSave: false })
 
-  sendToken(user, 200, res);
+  sendToken(user, 200, res)
+})
+
+// Get User Details
+exports.getUserDetails = catchAsyncErrors(async (req, res, next) => {
+  // Only an authorized user can access this route, i.e., only after login
+  // And during authorization in isAuthenticated, we are storing the user in req.user
+  const user = await User.findById(req.user.id)
+  res.status(200).json({
+    success: true,
+    user
+  })
+})
+
+// update User password
+exports.updatePassword = catchAsyncErrors(async (req, res, next) => {
+  const user = await User.findById(req.user.id).select('+password')
+  // console.log("before ",isPasswordMatched);
+  const isPasswordMatched = await user.comparePassword(req.body.oldPassword)
+  // console.log("req.body.oldPassword",req.body.oldPassword);
+  // console.log(isPasswordMatched);
+  if (!isPasswordMatched) {
+    return next(new ErrorHandler('Old password is incorrect', 400))
+  }
+  if (req.body.newPassword !== req.body.confirmPassword) {
+    return next(new ErrorHandler('Password does not match', 400))
+  }
+
+  user.password = req.body.newPassword
+
+  await user.save()
+
+  sendToken(user, 200, res)
 })
